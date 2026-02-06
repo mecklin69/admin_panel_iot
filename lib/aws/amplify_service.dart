@@ -103,6 +103,39 @@ query ListClients {
       return [];
     }
   }
+  static Future<bool> loginUser(String email, String password) async {
+    try {
+      const String graphQLDocument = '''
+query ListClients {
+  listClients {
+    items {
+      email
+      password
+    }
+  }
+}''';
+
+      final request = GraphQLRequest<String>(document: graphQLDocument);
+      final response = await Amplify.API.query(request: request).response;
+
+      if (response.data == null) return false;
+
+      final Map<String, dynamic> data = jsonDecode(response.data!);
+      final List users = data['listClients']['items'];
+
+      for (final user in users) {
+        if (user['email'] == email && user['password'] == password) {
+          return true;
+        }
+      }
+
+      return false;
+
+    } catch (e) {
+      safePrint("Login error: $e");
+      return false;
+    }
+  }
 
   // --- DELETE ---
   static Future<bool> deleteClient(String vendorID) async {
