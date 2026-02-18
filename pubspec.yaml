@@ -38,6 +38,12 @@ dependencies:
   amplify_flutter: ^2.0.0
   amplify_api: ^2.0.0
   amplify_auth_cognito: ^2.0.0 # Recommended for secure DB access
+  csv: ^6.0.0
+  printing: ^5.14.2
+  file_picker: ^10.3.10
+  share_plus: ^12.0.1
+  html: ^0.15.6
+  universal_html: ^2.3.0
 
 dev_dependencies:
   flutter_test:
