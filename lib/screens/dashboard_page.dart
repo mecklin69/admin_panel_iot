@@ -7,11 +7,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../aws/amplify_service.dart';
 import 'dart:convert';
-import 'dart:io' show File, Platform; // Use 'show' to be explicit
+import 'dart:io' show File, Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 // This is the trick for Web
 import 'package:universal_html/html.dart' as html;
+
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -34,6 +35,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _loadClients() async {
+    setState(() => _isLoading = true);
     try {
       final data = await AmplifyService.fetchAllClients();
       setState(() {
@@ -49,6 +51,52 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // --- DELETE LOGIC ---
+  Future<void> _deleteClient(String vendorID, String companyName) async {
+    // Show confirmation dialog
+    bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Delete"),
+        content: Text("Are you sure you want to delete $companyName?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    ) ??
+        false;
+
+    if (confirm) {
+      setState(() => _isLoading = true);
+      final success = await AmplifyService.deleteClient(vendorID);
+      if (success) {
+        _showSnackBar("Client deleted successfully", Colors.green);
+        _loadClients(); // Refresh data
+      } else {
+        setState(() => _isLoading = false);
+        _showSnackBar("Failed to delete client", Colors.red);
+      }
+    }
+  }
+// --- NEW: METRIC CALCULATIONS ---
+  int get _totalDevices => _allClients.fold(0, (sum, item) => sum + (int.tryParse(item['deviceCount'].toString()) ?? 0));
+
+  String get _topRegion {
+    if (_allClients.isEmpty) return "N/A";
+    var regions = _allClients.map((c) => c['location']).toList();
+    var freq = <dynamic, int>{};
+    for (var r in regions) {
+      freq[r] = (freq[r] ?? 0) + 1;
+    }
+    return freq.entries.reduce((a, b) => a.value > b.value ? a : b).key.toString();
+  }
   void _filterSearch(String query) {
     setState(() {
       _filteredClients = _allClients.where((client) {
@@ -62,33 +110,128 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool isMobile = MediaQuery.of(context).size.width < 800;
+    bool isMobile = MediaQuery.of(context).size.width < 900; // Increased breakpoint slightly for table comfort
 
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading && _allClients.isEmpty) return const Center(child: CircularProgressIndicator());
     if (_error != null) return Center(child: Text("❌ $_error"));
 
     return Scaffold(
       backgroundColor: isMobile ? Colors.grey[100] : Colors.white,
-      appBar: isMobile ? AppBar(
+      appBar: isMobile
+          ? AppBar(
         title: const Text("Deployments"),
         actions: [IconButton(icon: const Icon(Icons.download), onPressed: _downloadCSV)],
-      ) : null,
-      body: Padding(
-        padding: EdgeInsets.all(isMobile ? 12 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isMobile) _buildDesktopHeader(),
-            const SizedBox(height: 15),
-            _buildSearchBar(),
-            const SizedBox(height: 20),
-            Expanded(
-              child: _filteredClients.isEmpty
-                  ? const Center(child: Text("No clients match your search"))
-                  : isMobile ? _buildMobileList() : _buildDesktopTable(),
+      )
+          : null,
+      body: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(isMobile ? 12 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!isMobile) _buildDesktopHeader(),
+                const SizedBox(height: 15,),
+                // --- ADDED METRIC CARDS ---
+                _buildMetricCards(isMobile),
+                const SizedBox(height: 15),
+                _buildSearchBar(),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: _filteredClients.isEmpty
+                      ? const Center(child: Text("No clients match your search"))
+                      : isMobile ? _buildMobileList() : _buildDesktopTable(),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black12,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+        ],
+      ),
+    );
+  }
+  Widget _buildMetricCards(bool isMobile) {
+    // List of metrics to display
+    final metrics = [
+      _metricData("Total Clients", _allClients.length.toString(), Icons.people, Colors.indigo),
+      _metricData("Managed Devices", _totalDevices.toString(), Icons.developer_board, Colors.orange),
+      _metricData("Top Region", _topRegion, Icons.map, Colors.green),
+    ];
+
+    if (isMobile) {
+      // On mobile, use a Column with padding to prevent horizontal overflow
+      // and allow the cards to take their natural height.
+      return Column(
+        children: metrics.map((m) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _metricCard(m.title, m.value, m.icon, m.color, isMobile),
+        )).toList(),
+      );
+    }
+
+    // On Desktop, keep the 3-column Grid
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 20,
+        mainAxisExtent: 100, // Fixed height prevents vertical overflow
+      ),
+      itemCount: metrics.length,
+      itemBuilder: (context, index) {
+        final m = metrics[index];
+        return _metricCard(m.title, m.value, m.icon, m.color, isMobile);
+      },
+    );
+  }
+
+  // Simple helper class/method to hold data
+  _MetricItem _metricData(String t, String v, IconData i, Color c) => _MetricItem(t, v, i, c);
+
+  Widget _metricCard(String title, String value, IconData icon, Color color, bool isMobile) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
+        border: Border(left: BorderSide(color: color, width: 5)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+              radius: 20,
+              backgroundColor: color.withOpacity(0.1),
+              child: Icon(icon, color: color, size: 20)
+          ),
+          const SizedBox(width: 12),
+          Expanded( // Added Expanded to handle long text overflow
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  value,
+                  style: TextStyle(
+                      fontSize: isMobile ? 18 : 20,
+                      fontWeight: FontWeight.bold
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          )
+        ],
       ),
     );
   }
@@ -135,7 +278,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildMobileList() {
     return ListView.builder(
       itemCount: _filteredClients.length,
-      padding: const EdgeInsets.only(bottom: 100), // Space for FAB if any
+      padding: const EdgeInsets.only(bottom: 100),
       itemBuilder: (context, index) {
         final client = _filteredClients[index];
         return Card(
@@ -143,10 +286,8 @@ class _DashboardPageState extends State<DashboardPage> {
           margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Theme(
-            // This removes the unwanted borders that ExpansionTile sometimes adds
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
-              // Key Fix: Wrap leading/title in a way that handles constraints
               leading: const CircleAvatar(
                 backgroundColor: Colors.indigo,
                 child: Icon(Icons.business, color: Colors.white, size: 20),
@@ -154,7 +295,7 @@ class _DashboardPageState extends State<DashboardPage> {
               title: Text(
                 client['companyName'] ?? 'Unknown Co',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                overflow: TextOverflow.ellipsis, // Prevents text from pushing width
+                overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
                 "ID: ${client['vendorID']}",
@@ -162,7 +303,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               children: [
                 Container(
-                  width: double.infinity, // Ensures internal content uses full width
+                  width: double.infinity,
                   padding: const EdgeInsets.all(16.0),
                   decoration: BoxDecoration(
                     color: Colors.indigo.withOpacity(0.02),
@@ -178,6 +319,15 @@ class _DashboardPageState extends State<DashboardPage> {
                       _infoRow(Icons.location_on, "Location", client['location']),
                       _infoRow(Icons.devices, "Device Count", client['deviceCount'].toString()),
                       _infoRow(Icons.calendar_today, "Deployed", client['deploymentDate']),
+                      const Divider(height: 24),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => _deleteClient(client['vendorID'], client['companyName']),
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          label: const Text("Delete Client", style: TextStyle(color: Colors.red)),
+                        ),
+                      )
                     ],
                   ),
                 )
@@ -201,7 +351,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // --- DESKTOP VIEW ---
   Widget _buildDesktopTable() {
     return Container(
       width: double.infinity,
@@ -220,12 +369,11 @@ class _DashboardPageState extends State<DashboardPage> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal, // Key for horizontal overflow
+          scrollDirection: Axis.horizontal,
           child: SingleChildScrollView(
-            scrollDirection: Axis.vertical, // Key for vertical overflow
+            scrollDirection: Axis.vertical,
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                // Ensures the table is at least as wide as the container
                 minWidth: MediaQuery.of(context).size.width - 48,
               ),
               child: DataTable(
@@ -233,7 +381,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 dataRowMaxHeight: 60,
                 headingRowHeight: 55,
                 horizontalMargin: 20,
-                columnSpacing: 40, // Adjust this to space out columns better
+                columnSpacing: 30,
                 columns: const [
                   DataColumn(label: Text('Vendor ID', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Client Name', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -241,6 +389,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   DataColumn(label: Text('Devices', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Location', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Deployment Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
                 rows: _filteredClients.map((client) {
                   return DataRow(cells: [
@@ -250,6 +399,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     DataCell(Text(client['deviceCount'].toString())),
                     DataCell(Text(client['location'] ?? '')),
                     DataCell(Text(client['deploymentDate'] ?? '')),
+                    DataCell(
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        onPressed: () => _deleteClient(client['vendorID'], client['companyName']),
+                        tooltip: "Delete Client",
+                      ),
+                    ),
                   ]);
                 }).toList(),
               ),
@@ -260,12 +416,9 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // --- DOWNLOAD LOGIC ---
-  // --- DOWNLOAD LOGIC ---
   Future<void> _downloadCSV() async {
     if (_filteredClients.isEmpty) return;
 
-    // 1. Prepare data rows
     List<List<dynamic>> rows = [
       ["Vendor ID", "First Name", "Last Name", "Email", "Company", "Devices", "Location", "Date"]
     ];
@@ -283,12 +436,10 @@ class _DashboardPageState extends State<DashboardPage> {
       ]);
     }
 
-    // 2. Convert to CSV String
     String csvData = const ListToCsvConverter().convert(rows);
 
     try {
       if (kIsWeb) {
-        // --- WEB LOGIC ---
         final bytes = utf8.encode(csvData);
         final blob = html.Blob([bytes], 'text/csv');
         final url = html.Url.createObjectUrlFromBlob(blob);
@@ -296,11 +447,8 @@ class _DashboardPageState extends State<DashboardPage> {
           ..setAttribute("download", "clients_export_${DateTime.now().millisecondsSinceEpoch}.csv")
           ..click();
         html.Url.revokeObjectUrl(url);
-
         _showSnackBar("Download started", Colors.green);
-      }
-      else if (Platform.isWindows) {
-        // --- WINDOWS LOGIC ---
+      } else if (Platform.isWindows) {
         String? path = await FilePicker.platform.saveFile(
           dialogTitle: 'Save Client Export',
           fileName: 'clients_export.csv',
@@ -313,9 +461,7 @@ class _DashboardPageState extends State<DashboardPage> {
           await file.writeAsString(csvData);
           _showSnackBar("File saved to $path", Colors.green);
         }
-      }
-      else {
-        // --- MOBILE LOGIC (Android/iOS) ---
+      } else {
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/clients_export.csv');
         await file.writeAsString(csvData);
@@ -327,10 +473,17 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // Small helper for cleaner code
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: color),
     );
   }
+}
+// Simple data class for mapping
+class _MetricItem {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color color;
+  _MetricItem(this.title, this.value, this.icon, this.color);
 }
