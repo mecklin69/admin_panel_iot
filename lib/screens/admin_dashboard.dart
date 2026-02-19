@@ -28,7 +28,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Scaffold(
       // Mobile Top Bar
       appBar: isMobile ? AppBar(
-        title: const Text("IoT Admin"),
+        title: const Text("Elevate Admin Center"),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: const Icon(Icons.bolt, color: Colors.indigo),

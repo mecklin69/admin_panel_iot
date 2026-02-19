@@ -1,7 +1,9 @@
-import 'dart:convert'; // Required for jsonDecode
+import 'dart:convert';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart'; // Add to pubspec.yaml if missing
 import '../amplifyconfiguration.dart';
 
 class AmplifyService {
@@ -17,7 +19,7 @@ class AmplifyService {
     }
   }
 
-  // --- CREATE ---
+  // --- CLIENT: CREATE ---
   static Future<bool> pushAccountToDynamo({
     required String vendorID,
     required String firstName,
@@ -30,7 +32,7 @@ class AmplifyService {
     required String date,
   }) async {
     try {
-      final String graphQLDocument = '''
+      const String graphQLDocument = '''
 mutation CreateClient(\$vendorID: String!, \$firstName: String!, \$lastName: String!, \$email: String!, \$password: String!, \$location: String!, \$companyName: String!, \$deviceCount: Int!, \$date: String!) {
   createClient(input: {
     vendorID: \$vendorID,
@@ -70,7 +72,7 @@ mutation CreateClient(\$vendorID: String!, \$firstName: String!, \$lastName: Str
     }
   }
 
-  // --- READ (FETCH) ---
+  // --- CLIENT: READ ---
   static Future<List<dynamic>> fetchAllClients() async {
     try {
       const String graphQLDocument = '''
@@ -103,6 +105,84 @@ query ListClients {
       return [];
     }
   }
+
+  // --- FIRMWARE: CREATE (NOW PERSISTENT) ---
+  static Future<bool> pushFirmwareMapping({
+    required String vendorID,
+    required String fileName,
+    required String fileSize,
+  }) async {
+    try {
+      const String graphQLDocument = '''
+mutation CreateFirmwareMapping(\$vendorID: String!, \$fileName: String!, \$fileSize: String!, \$uploadDate: String!) {
+  createFirmwareMapping(input: {
+    vendorID: \$vendorID,
+    fileName: \$fileName,
+    fileSize: \$fileSize,
+    uploadDate: \$uploadDate
+  }) {
+    id
+    vendorID
+  }
+}''';
+
+      final request = GraphQLRequest<String>(
+        document: graphQLDocument,
+        variables: {
+          'vendorID': vendorID,
+          'fileName': fileName,
+          'fileSize': fileSize,
+          'uploadDate': DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
+        },
+      );
+
+      final response = await Amplify.API.mutate(request: request).response;
+
+      if (response.errors.isNotEmpty) {
+        safePrint('GraphQL Errors: ${response.errors}');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      safePrint("AWS Push Error: $e");
+      return false;
+    }
+  }
+
+  // --- FIRMWARE: READ (NOW PERSISTENT) ---
+  static Future<List<dynamic>> fetchFirmwareMappings() async {
+    try {
+      const String graphQLDocument = '''
+query ListFirmwareMappings {
+  listFirmwareMappings {
+    items {
+      id
+      vendorID
+      fileName
+      fileSize
+      uploadDate
+    }
+  }
+}''';
+
+      final request = GraphQLRequest<String>(document: graphQLDocument);
+      final response = await Amplify.API.query(request: request).response;
+
+      if (response.data != null) {
+        final Map<String, dynamic> data = jsonDecode(response.data!);
+        List items = data['listFirmwareMappings']['items'] ?? [];
+        // Sort newest first
+        items.sort((a, b) => (b['uploadDate'] ?? "").compareTo(a['uploadDate'] ?? ""));
+        return items;
+      }
+      return [];
+    } catch (e) {
+      safePrint('Firmware Fetch failed: $e');
+      return [];
+    }
+  }
+
+  // --- AUTH: LOGIN ---
   static Future<bool> loginUser(String email, String password) async {
     try {
       const String graphQLDocument = '''
@@ -121,26 +201,23 @@ query ListClients {
       if (response.data == null) return false;
 
       final Map<String, dynamic> data = jsonDecode(response.data!);
-      final List users = data['listClients']['items'];
+      final List users = data['listClients']['items'] ?? [];
 
       for (final user in users) {
         if (user['email'] == email && user['password'] == password) {
           return true;
         }
       }
-
       return false;
-
     } catch (e) {
       safePrint("Login error: $e");
       return false;
     }
   }
 
-  // --- DELETE ---
+  // --- CLIENT: DELETE ---
   static Future<bool> deleteClient(String vendorID) async {
     try {
-      // Note: Because vendorID is your @primaryKey, we pass that to the input
       const String graphQLDocument = '''
 mutation DeleteClient(\$vendorID: String!) {
   deleteClient(input: { vendorID: \$vendorID }) {
@@ -154,12 +231,7 @@ mutation DeleteClient(\$vendorID: String!) {
       );
 
       final response = await Amplify.API.mutate(request: request).response;
-
-      if (response.errors.isNotEmpty) {
-        safePrint('Delete Errors: ${response.errors}');
-        return false;
-      }
-      return true;
+      return response.errors.isEmpty;
     } catch (e) {
       safePrint('Delete failed: $e');
       return false;

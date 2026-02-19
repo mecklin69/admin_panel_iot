@@ -10,73 +10,89 @@ class FirmwareFlashPage extends StatefulWidget {
 }
 
 class _FirmwareFlashPageState extends State<FirmwareFlashPage> {
-  // State variables
   String? _selectedVendorID;
   PlatformFile? _selectedFile;
   List<String> _availableVendorIDs = [];
-  List<dynamic> _persistentInventory = []; // Now stores data from DB
-  bool _isLoadingVendors = true;
+  List<dynamic> _persistentInventory = [];
+  bool _isLoading = true;
 
-  // Tracking inventory locally
-  final List<Map<String, String>> _firmwareInventory = [];
+  // Custom Colors (Colorful Palette)
+  final Color primaryColor = const Color(0xFF006064); // Dark Teal
+  final Color accentColor = const Color(0xFFFF6D00);  // Deep Orange
+  final Color surfaceColor = const Color(0xFFF4F7F6);
 
   @override
   void initState() {
     super.initState();
-    _fetchExistingVendors();
+    _refreshData();
   }
 
-  // --- Logic: Fetch IDs from Amplify ---
-  Future<void> _fetchExistingVendors() async {
+  // --- REFRESH DATA FROM AWS ---
+  Future<void> _refreshData() async {
+    setState(() => _isLoading = true);
     try {
-      final clients = await AmplifyService.fetchAllClients();
+      final results = await Future.wait([
+        AmplifyService.fetchAllClients(),
+        AmplifyService.fetchFirmwareMappings(),
+      ]);
+
       setState(() {
-        // Extract only the vendorID strings and remove duplicates
-        _availableVendorIDs = clients
-            .map((c) => c['vendorID']?.toString() ?? '')
+        _availableVendorIDs = results[0]
+            .map((c) => c['vendorID'].toString())
             .where((id) => id.isNotEmpty)
             .toList();
-        _isLoadingVendors = false;
+        _persistentInventory = results[1];
+        _isLoading = false;
       });
     } catch (e) {
-      debugPrint("Error fetching vendors: $e");
-      setState(() => _isLoadingVendors = false);
+      _showSnackBar("Sync Error: $e", Colors.redAccent);
+      setState(() => _isLoading = false);
     }
   }
 
-  // --- Logic: Pick Firmware File ---
+  // --- SAVE TO AWS ---
+  Future<void> _handleRegister() async {
+    if (_selectedVendorID == null || _selectedFile == null) {
+      _showSnackBar("Missing Vendor ID or Binary File", accentColor);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final success = await AmplifyService.pushFirmwareMapping(
+      vendorID: _selectedVendorID!,
+      fileName: _selectedFile!.name,
+      fileSize: "${(_selectedFile!.size / 1024).toStringAsFixed(2)} KB",
+    );
+
+    if (success) {
+      _selectedFile = null;
+      await _refreshData(); // Updates mapping history list
+      _showSnackBar("Firmware successfully deployed to Cloud", Colors.teal);
+    } else {
+      setState(() => _isLoading = false);
+      _showSnackBar("AWS Database Error", Colors.redAccent);
+    }
+  }
+
   Future<void> _pickFirmware() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['bin', 'hex', 'ota', 'zip'],
     );
-
-    if (result != null) {
-      setState(() => _selectedFile = result.files.first);
-    }
-  }
-
-  // --- Logic: Register ---
-  void _registerFirmware() {
-    if (_selectedVendorID == null || _selectedFile == null) {
-      _showSnackBar("Select a Vendor and a File first!", Colors.orange);
-      return;
-    }
-
-    setState(() {
-      _firmwareInventory.insert(0, {
-        "vendorID": _selectedVendorID!,
-        "fileName": _selectedFile!.name,
-        "size": "${(_selectedFile!.size / 1024).toStringAsFixed(2)} KB",
-        "date": DateTime.now().toString().split('.')[0],
-      });
-      _selectedFile = null; // Reset file but keep vendor for convenience
-    });
-    _showSnackBar("Firmware mapped to $_selectedVendorID", Colors.green);
+    if (result != null) setState(() => _selectedFile = result.files.first);
   }
 
   void _showSnackBar(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(15),
+        )
+    );
   }
 
   @override
@@ -84,130 +100,208 @@ class _FirmwareFlashPageState extends State<FirmwareFlashPage> {
     bool isMobile = MediaQuery.of(context).size.width < 700;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(isMobile ? 16 : 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Firmware Management",
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo)),
-            const Text("Select a provisioned Vendor ID to associate with custom firmware."),
-            const SizedBox(height: 30),
+      backgroundColor: surfaceColor,
+      body: _isLoading && _persistentInventory.isEmpty
+          ? Center(child: CircularProgressIndicator(color: primaryColor))
+          : RefreshIndicator(
+        color: accentColor,
+        onRefresh: _refreshData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 16 : 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 35),
+              _buildUploadCard(isMobile),
+              const SizedBox(height: 45),
+              _buildHistorySection(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // --- SECTION 1: UPLOAD & ASSIGN ---
-            Container(
-              padding: const EdgeInsets.all(20),
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("OTA Control Center",
+            style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: primaryColor, letterSpacing: -0.5)),
+        const SizedBox(height: 5),
+        Container(width: 60, height: 4, decoration: BoxDecoration(color: accentColor, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(height: 10),
+        const Text("Deploy and track firmware binaries across your global hardware fleet.",
+            style: TextStyle(fontSize: 15, color: Colors.black54)),
+      ],
+    );
+  }
+
+  Widget _buildUploadCard(bool isMobile) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10))],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          // Styled Dropdown
+          DropdownButtonFormField<String>(
+            value: _selectedVendorID,
+            hint: const Text("Select Targeted Vendor"),
+            decoration: _inputDecoration(Icons.router_rounded, "Hardware Target"),
+            items: _availableVendorIDs.map((id) => DropdownMenuItem(value: id, child: Text(id))).toList(),
+            onChanged: (val) => setState(() => _selectedVendorID = val),
+          ),
+          const SizedBox(height: 20),
+
+          // Custom File Picker UI
+          _filePickerUI(),
+          const SizedBox(height: 30),
+
+          // Gradient Button
+          InkWell(
+            onTap: _isLoading ? null : _handleRegister,
+            child: Container(
+              height: 60,
+              width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.indigo.withOpacity(0.03),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.indigo.withOpacity(0.1)),
+                gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.8)]),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
               ),
-              child: Column(
-                children: [
-                  // --- VENDOR PICKER (DROPDOWN) ---
-                  _isLoadingVendors
-                      ? const LinearProgressIndicator()
-                      : DropdownButtonFormField<String>(
-                    value: _selectedVendorID,
-                    hint: const Text("Select Available Vendor ID"),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white,
-                      prefixIcon: const Icon(Icons.badge, color: Colors.indigo),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    items: _availableVendorIDs.map((id) {
-                      return DropdownMenuItem(value: id, child: Text(id));
-                    }).toList(),
-                    onChanged: (val) => setState(() => _selectedVendorID = val),
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  // File Selection Area
-                  _filePickerUI(),
-
-                  const SizedBox(height: 20),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton.icon(
-                      onPressed: _registerFirmware,
-                      icon: const Icon(Icons.link, color: Colors.white),
-                      label: const Text("MAP FIRMWARE TO VENDOR", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    ),
-                  ),
-                ],
+              child: Center(
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.cloud_upload_rounded, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text("REGISTER FIRMWARE", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                  ],
+                ),
               ),
             ),
-
-            const SizedBox(height: 40),
-
-            // --- SECTION 2: TRACKING ---
-            const Text("Firmware Mapping History", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            _buildInventoryList(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _filePickerUI() {
-    return InkWell(
+    return GestureDetector(
       onTap: _pickFirmware,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: primaryColor.withOpacity(0.1)),
         ),
         child: Row(
           children: [
-            Icon(Icons.file_present, color: _selectedFile == null ? Colors.grey : Colors.orange),
-            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: accentColor.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(Icons.file_copy_rounded, color: accentColor, size: 24),
+            ),
+            const SizedBox(width: 15),
             Expanded(
-              child: Text(
-                _selectedFile == null ? "Select Firmware Binary" : _selectedFile!.name,
-                style: TextStyle(color: _selectedFile == null ? Colors.grey : Colors.black, fontWeight: FontWeight.w500),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _selectedFile == null ? "Binary Selection" : _selectedFile!.name,
+                    style: TextStyle(fontWeight: FontWeight.bold, color: _selectedFile == null ? Colors.black45 : Colors.black87),
+                  ),
+                  Text(_selectedFile == null ? "Tap to browse local storage" : "${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB",
+                      style: const TextStyle(fontSize: 12, color: Colors.black38)),
+                ],
               ),
             ),
-            const Icon(Icons.search, color: Colors.indigo),
+            Icon(Icons.add_circle_outline_rounded, color: primaryColor),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInventoryList() {
-    if (_firmwareInventory.isEmpty) {
-      return const Center(child: Text("No firmware mappings recorded in this session."));
-    }
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _firmwareInventory.length,
-      itemBuilder: (context, index) {
-        final item = _firmwareInventory[index];
-        return Card(
-          elevation: 0,
-          margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            leading: const Icon(Icons.app_settings_alt, color: Colors.orange),
-            title: Text("Vendor: ${item['vendorID']}", style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text("${item['fileName']} • ${item['date']}"),
-            trailing: IconButton(
-              icon: const Icon(Icons.close, size: 20),
-              onPressed: () => setState(() => _firmwareInventory.removeAt(index)),
-            ),
+  Widget _buildHistorySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text("Live Deployment History", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+            const Spacer(),
+            IconButton(icon: Icon(Icons.refresh_rounded, color: primaryColor), onPressed: _refreshData),
+          ],
+        ),
+        const SizedBox(height: 15),
+        if (_persistentInventory.isEmpty)
+          _emptyStateUI()
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _persistentInventory.length,
+            itemBuilder: (context, index) {
+              final item = _persistentInventory[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  leading: CircleAvatar(
+                    backgroundColor: surfaceColor,
+                    child: Icon(Icons.developer_board_rounded, color: primaryColor, size: 20),
+                  ),
+                  title: Text("${item['vendorID']}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text("${item['fileName']} • ${item['uploadDate']}"),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                    child: const Text("SYNCED", style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              );
+            },
           ),
-        );
-      },
+      ],
+    );
+  }
+
+  Widget _emptyStateUI() {
+    return Center(
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+          Icon(Icons.inventory_2_outlined, size: 60, color: Colors.black12),
+          const SizedBox(height: 10),
+          const Text("No firmware mappings in DynamoDB", style: TextStyle(color: Colors.black26)),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(IconData icon, String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: primaryColor.withOpacity(0.6)),
+      prefixIcon: Icon(icon, color: primaryColor),
+      filled: true,
+      fillColor: surfaceColor,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: primaryColor, width: 2)),
     );
   }
 }

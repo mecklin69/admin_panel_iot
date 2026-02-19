@@ -14,3 +14,11 @@ type Client @model {
   deviceCount: Int!
   deploymentDate: String!
 }
+
+type FirmwareMapping @model @auth(rules: [{ allow: public }]) {
+  id: ID!
+  vendorID: String! @index(name: "byVendor")
+  fileName: String!
+  fileSize: String!
+  uploadDate: String!
+}

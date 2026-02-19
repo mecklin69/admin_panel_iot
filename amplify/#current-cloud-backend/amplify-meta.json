@@ -35,8 +35,8 @@
         "s3TemplateURL": "https://s3.amazonaws.com/amplify-adminpanel-dev-c0574-deployment/amplify-cfn-templates/api/cloudformation-template.json",
         "logicalId": "apiadminpanel"
       },
-      "lastPushTimeStamp": "2026-02-03T07:25:00.044Z",
-      "lastPushDirHash": "JpN9Bt2NppK5TQdhDrHzjEh4Y2M="
+      "lastPushTimeStamp": "2026-02-18T22:41:24.730Z",
+      "lastPushDirHash": "7UsdMbBurYH+C5AU/k3cu/D0R+8="
     }
   }
 }
