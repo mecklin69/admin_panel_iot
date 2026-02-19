@@ -28,6 +28,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void initState() {
+    html.window.onContextMenu.listen((event) => event.preventDefault());
     super.initState();
     _loadClients();
   }
