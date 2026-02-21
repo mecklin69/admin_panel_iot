@@ -1,9 +1,9 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'dashboard_page.dart';
 import 'account_creation_page.dart';
 import 'firmwareFlashPage.dart';
+import 'mapConfiguration.dart';
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
@@ -18,7 +18,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     const DashboardPage(),
     const AccountCreationPage(),
     const FirmwareFlashPage(),
+    const MapConfiguration(),
     const SettingsPage(),
+
   ];
 
   @override
@@ -45,7 +47,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.person_add), label: 'Account'),
           BottomNavigationBarItem(icon: Icon(Icons.system_update_alt), label: 'Flash'),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'), // Added Map
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+
         ],
       ) : null,
 
@@ -65,6 +69,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 NavigationRailDestination(icon: Icon(Icons.dashboard), label: Text('Dashboard')),
                 NavigationRailDestination(icon: Icon(Icons.person_add), label: Text('Create Account')),
                 NavigationRailDestination(icon: Icon(Icons.system_update_alt), label: Text('Flash IoT')),
+                NavigationRailDestination(icon: Icon(Icons.map), label: Text('Device Distribution')), // Added Map
                 NavigationRailDestination(icon: Icon(Icons.settings), label: Text('Settings')),
               ],
             ),
@@ -76,13 +81,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 }
-// --------------------------------------------------------------------------
-// NEW: FIRMWARE FLASH PAGE
-// --------------------------------------------------------------------------
 
-// --------------------------------------------------------------------------
-// UPDATED SETTINGS PAGE
-// --------------------------------------------------------------------------
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
