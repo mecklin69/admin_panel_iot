@@ -1,19 +1,19 @@
 {
   "providers": {
     "awscloudformation": {
-      "AuthRoleName": "amplify-adminpanel-dev-c0574-authRole",
-      "UnauthRoleArn": "arn:aws:iam::975049938380:role/amplify-adminpanel-dev-c0574-unauthRole",
-      "AuthRoleArn": "arn:aws:iam::975049938380:role/amplify-adminpanel-dev-c0574-authRole",
+      "AuthRoleName": "amplify-adminpaneliot-dev-4244a-authRole",
+      "UnauthRoleArn": "arn:aws:iam::975049938380:role/amplify-adminpaneliot-dev-4244a-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::975049938380:role/amplify-adminpaneliot-dev-4244a-authRole",
       "Region": "ap-south-1",
-      "DeploymentBucketName": "amplify-adminpanel-dev-c0574-deployment",
-      "UnauthRoleName": "amplify-adminpanel-dev-c0574-unauthRole",
-      "StackName": "amplify-adminpanel-dev-c0574",
-      "StackId": "arn:aws:cloudformation:ap-south-1:975049938380:stack/amplify-adminpanel-dev-c0574/a6a622d0-0077-11f1-a168-0292f2414fc5",
-      "AmplifyAppId": "d1w2fqar2n68xn"
+      "DeploymentBucketName": "amplify-adminpaneliot-dev-4244a-deployment",
+      "UnauthRoleName": "amplify-adminpaneliot-dev-4244a-unauthRole",
+      "StackName": "amplify-adminpaneliot-dev-4244a",
+      "StackId": "arn:aws:cloudformation:ap-south-1:975049938380:stack/amplify-adminpaneliot-dev-4244a/942e2a50-1880-11f1-a362-0abecba4f409",
+      "AmplifyAppId": "d1yd5pqz1w58cv"
     }
   },
   "api": {
-    "adminpanel": {
+    "adminpaneliot": {
       "service": "AppSync",
       "providerPlugin": "awscloudformation",
       "dependsOn": [],
@@ -27,16 +27,30 @@
           },
           "additionalAuthenticationProviders": []
         },
-        "GraphQLAPIIdOutput": "wwx6ldwdkjgb7e6h3nx65fxj5y",
-        "GraphQLAPIEndpointOutput": "https://usmaobwxpza2jnngz2exlv2ury.appsync-api.ap-south-1.amazonaws.com/graphql",
-        "GraphQLAPIKeyOutput": "da2-iepdmvitang4zgc2yzhy22e5oa"
+        "GraphQLAPIIdOutput": "c46qr5kqurdzrcu2vr5jhzedma",
+        "GraphQLAPIEndpointOutput": "https://xty3yj7kkjgm7efmek3c7ohpfa.appsync-api.ap-south-1.amazonaws.com/graphql",
+        "GraphQLAPIKeyOutput": "da2-utzxeucxmvcrdllr6fi2afm6uy"
       },
       "providerMetadata": {
-        "s3TemplateURL": "https://s3.amazonaws.com/amplify-adminpanel-dev-c0574-deployment/amplify-cfn-templates/api/cloudformation-template.json",
-        "logicalId": "apiadminpanel"
+        "s3TemplateURL": "https://s3.amazonaws.com/amplify-adminpaneliot-dev-4244a-deployment/amplify-cfn-templates/api/cloudformation-template.json",
+        "logicalId": "apiadminpaneliot"
       },
-      "lastPushTimeStamp": "2026-02-18T22:41:24.730Z",
-      "lastPushDirHash": "7UsdMbBurYH+C5AU/k3cu/D0R+8="
+      "lastPushTimeStamp": "2026-03-05T16:33:23.229Z",
+      "lastPushDirHash": "+mGKBEiT6jgKZNtNiwkXklvdkeQ="
+    }
+  },
+  "hosting": {
+    "amplifyhosting": {
+      "service": "amplifyhosting",
+      "providerPlugin": "awscloudformation",
+      "type": "manual",
+      "providerMetadata": {
+        "s3TemplateURL": "https://s3.amazonaws.com/amplify-adminpaneliot-dev-4244a-deployment/amplify-cfn-templates/hosting/amplifyhosting-template.json",
+        "logicalId": "hostingamplifyhosting"
+      },
+      "lastPushTimeStamp": "2026-03-05T16:33:22.868Z",
+      "output": {},
+      "lastPushDirHash": "0qAfOA3gVcXmDXWHalWVHifm9uA="
     }
   }
 }

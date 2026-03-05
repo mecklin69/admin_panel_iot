@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math'; // For random simulation
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -11,15 +12,16 @@ class MapConfiguration extends StatefulWidget {
 
 class _MapConfigurationState extends State<MapConfiguration> with AutomaticKeepAliveClientMixin {
   final Completer<GoogleMapController> _controller = Completer();
-
-  // State variables
   String? _selectedState;
   Set<Marker> _markers = {};
 
+  @override
+  bool get wantKeepAlive => true;
+
   // Camera settings
   static const CameraPosition _initialIndia = CameraPosition(
-    target: LatLng(20.5937, 78.9629),
-    zoom: 4.8,
+    target: LatLng(22.0000, 78.9629),
+    zoom: 4.5,
   );
 
   final Map<String, LatLng> _indiaStates = {
@@ -59,28 +61,75 @@ class _MapConfigurationState extends State<MapConfiguration> with AutomaticKeepA
     "Puducherry": const LatLng(11.9416, 79.8083),
   };
 
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUttarakhandSensors(); // Initialize with sensor pins
+  }
+
+  void _loadUttarakhandSensors() {
+    final Random random = Random();
+
+    // 16 key approximate coordinates within Uttarakhand
+    final List<LatLng> uttarakhandPoints = [
+      const LatLng(30.3165, 78.0322), // Dehradun
+      const LatLng(29.9457, 78.1642), // Haridwar
+      const LatLng(29.3919, 79.4542), // Nainital
+      const LatLng(30.0869, 78.2676), // Rishikesh
+      const LatLng(29.5892, 79.6467), // Almora
+      const LatLng(30.4000, 79.3333), // Chamoli
+      const LatLng(30.7343, 79.0669), // Kedarnath Area
+      const LatLng(30.5208, 78.8471), // Rudraprayag
+      const LatLng(30.1467, 78.7889), // Pauri
+      const LatLng(30.3753, 78.4444), // Tehri
+      const LatLng(30.7291, 78.4359), // Uttarkashi
+      const LatLng(29.7381, 80.2182), // Pithoragarh
+      const LatLng(28.9800, 79.4500), // Rudrapur
+      const LatLng(29.8377, 79.7694), // Bageshwar
+      const LatLng(29.2104, 79.5126), // Haldwani
+      const LatLng(29.8543, 77.8880), // Roorkee
+    ];
+
+    Set<Marker> sensorMarkers = {};
+
+    for (int i = 0; i < uttarakhandPoints.length; i++) {
+      // Simulating real-time data
+      double temp = 15 + random.nextDouble() * 15; // 15°C to 30°C
+      int humidity = 40 + random.nextInt(40); // 40% to 80%
+      double turbidity = random.nextDouble() * 5.0; // 0-5 NTU
+
+      sensorMarkers.add(
+        Marker(
+          markerId: MarkerId('sensor_$i'),
+          position: uttarakhandPoints[i],
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          infoWindow: InfoWindow(
+            title: "Sensor Node UK-${100 + i}",
+            snippet: "Temp: ${temp.toStringAsFixed(1)}°C | Hum: $humidity% | Turb: ${turbidity.toStringAsFixed(2)} NTU",
+          ),
+        ),
+      );
+    }
+
+    setState(() {
+      _markers.addAll(sensorMarkers);
+    });
+  }
+
   void _onStateSelected(String? stateName) async {
     if (stateName == null) return;
-
     final coords = _indiaStates[stateName]!;
     final GoogleMapController controller = await _controller.future;
 
     setState(() {
       _selectedState = stateName;
-      // Add a marker at the state location
-      _markers = {
-        Marker(
-          markerId: MarkerId(stateName),
-          position: coords,
-          infoWindow: InfoWindow(title: stateName, snippet: "Major Hub"),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        )
-      };
+      // We keep the sensor markers and just move the camera
     });
 
     controller.animateCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(target: coords, zoom: 6.5),
+        CameraPosition(target: coords, zoom: stateName == "Uttarakhand" ? 8.5 : 6.5),
       ),
     );
   }
@@ -91,24 +140,16 @@ class _MapConfigurationState extends State<MapConfiguration> with AutomaticKeepA
     return Scaffold(
       body: Stack(
         children: [
-          // THE MAP
           GoogleMap(
             initialCameraPosition: _initialIndia,
             markers: _markers,
             onMapCreated: (GoogleMapController controller) => _controller.complete(controller),
-            zoomControlsEnabled: false, // Cleaner UI
-            mapToolbarEnabled: false,
+            zoomControlsEnabled: false,
           ),
-
-          // OVERLAY UI
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  _buildDropdown(),
-                ],
-              ),
+              child: _buildDropdown(),
             ),
           ),
         ],
@@ -129,11 +170,10 @@ class _MapConfigurationState extends State<MapConfiguration> with AutomaticKeepA
           value: _selectedState,
           hint: const Text("Select India State", style: TextStyle(color: Colors.indigo)),
           isExpanded: true,
-          icon: const Icon(Icons.map_outlined, color: Colors.indigo),
           items: _indiaStates.keys.map((String value) {
             return DropdownMenuItem<String>(
               value: value,
-              child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+              child: Text(value),
             );
           }).toList(),
           onChanged: _onStateSelected,
@@ -141,8 +181,4 @@ class _MapConfigurationState extends State<MapConfiguration> with AutomaticKeepA
       ),
     );
   }
-
-  @override
-  // TODO: implement wantKeepAlive
-  bool get wantKeepAlive => true;
 }
