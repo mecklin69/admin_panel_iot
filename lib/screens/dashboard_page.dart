@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:universal_html/html.dart' as html;
 
 import '../aws/amplify_service.dart';
-import 'dashboard_widget.dart'; // Import the new file
+import 'dashboard_widget.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -89,7 +89,6 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // --- Logic Getters ---
   int get _totalDevices => _allClients.fold(0, (sum, item) => sum + (int.tryParse(item['deviceCount'].toString()) ?? 0));
 
   String get _topRegion {

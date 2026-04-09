@@ -27,7 +27,6 @@ class _FirmwareFlashPageState extends State<FirmwareFlashPage> {
     _refreshData();
   }
 
-  // --- REFRESH DATA FROM AWS ---
   Future<void> _refreshData() async {
     setState(() => _isLoading = true);
     try {

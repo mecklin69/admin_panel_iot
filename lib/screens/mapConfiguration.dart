@@ -1,7 +1,30 @@
 import 'dart:async';
-import 'dart:math'; // For random simulation
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+void main() {
+  runApp(const MaterialApp(
+    home: MapConfiguration(),
+    debugShowCheckedModeBanner: false,
+  ));
+}
+
+class SensorNode {
+  final String id;
+  final LatLng position;
+  final double temperature;
+  final int humidity;
+  final double turbidity;
+
+  SensorNode({
+    required this.id,
+    required this.position,
+    required this.temperature,
+    required this.humidity,
+    required this.turbidity,
+  });
+}
 
 class MapConfiguration extends StatefulWidget {
   const MapConfiguration({super.key});
@@ -10,146 +33,136 @@ class MapConfiguration extends StatefulWidget {
   State<MapConfiguration> createState() => _MapConfigurationState();
 }
 
-class _MapConfigurationState extends State<MapConfiguration> with AutomaticKeepAliveClientMixin {
+class _MapConfigurationState extends State<MapConfiguration> {
   final Completer<GoogleMapController> _controller = Completer();
   String? _selectedState;
-  Set<Marker> _markers = {};
-
-  @override
-  bool get wantKeepAlive => true;
-
-  // Camera settings
-  static const CameraPosition _initialIndia = CameraPosition(
-    target: LatLng(22.0000, 78.9629),
-    zoom: 4.5,
-  );
+  bool _isPanelOpen = false;
+  final List<SensorNode> _activeSensors = [];
+  final Set<Marker> _markers = {};
 
   final Map<String, LatLng> _indiaStates = {
     "Andhra Pradesh": const LatLng(15.9129, 79.7400),
-    "Arunachal Pradesh": const LatLng(28.2180, 94.7278),
-    "Assam": const LatLng(26.2006, 92.9376),
     "Bihar": const LatLng(25.0961, 85.3131),
-    "Chhattisgarh": const LatLng(21.2787, 81.8661),
-    "Goa": const LatLng(15.2993, 74.1240),
     "Gujarat": const LatLng(22.2587, 71.1924),
-    "Haryana": const LatLng(29.0588, 76.0856),
-    "Himachal Pradesh": const LatLng(31.1048, 77.1734),
-    "Jammu & Kashmir": const LatLng(33.2778, 75.3412), // Added
-    "Jharkhand": const LatLng(23.6102, 85.2799),
-    "Karnataka": const LatLng(15.3173, 75.7139),
-    "Kerala": const LatLng(10.8505, 76.2711),
-    "Ladakh": const LatLng(34.1526, 77.5770), // Added
-    "Madhya Pradesh": const LatLng(22.9734, 78.6569),
     "Maharashtra": const LatLng(19.7515, 75.7139),
-    "Manipur": const LatLng(24.6637, 93.9063),
-    "Meghalaya": const LatLng(25.4670, 91.3662),
-    "Mizoram": const LatLng(23.1645, 92.9376),
-    "Nagaland": const LatLng(26.1584, 94.5624),
-    "Odisha": const LatLng(20.9517, 85.0985),
-    "Punjab": const LatLng(31.1471, 75.3412),
     "Rajasthan": const LatLng(27.0238, 74.2179),
-    "Sikkim": const LatLng(27.5330, 88.5122),
-    "Tamil Nadu": const LatLng(11.1271, 78.6569),
-    "Telangana": const LatLng(18.1124, 79.0193),
-    "Tripura": const LatLng(23.9408, 91.9882),
     "Uttar Pradesh": const LatLng(26.8467, 80.9462),
     "Uttarakhand": const LatLng(30.0668, 79.0193),
     "West Bengal": const LatLng(22.9868, 87.8550),
-    "Andaman & Nicobar": const LatLng(11.7401, 92.6586),
-    "Chandigarh": const LatLng(30.7333, 76.7794),
-    "Delhi": const LatLng(28.7041, 77.1025),
-    "Puducherry": const LatLng(11.9416, 79.8083),
   };
-
 
   @override
   void initState() {
     super.initState();
-    _loadUttarakhandSensors(); // Initialize with sensor pins
+    _generateMockSensors();
   }
 
-  void _loadUttarakhandSensors() {
+  void _generateMockSensors() {
     final Random random = Random();
-
-    // 16 key approximate coordinates within Uttarakhand
     final List<LatLng> uttarakhandPoints = [
-      const LatLng(30.3165, 78.0322), // Dehradun
-      const LatLng(29.9457, 78.1642), // Haridwar
-      const LatLng(29.3919, 79.4542), // Nainital
-      const LatLng(30.0869, 78.2676), // Rishikesh
-      const LatLng(29.5892, 79.6467), // Almora
-      const LatLng(30.4000, 79.3333), // Chamoli
-      const LatLng(30.7343, 79.0669), // Kedarnath Area
-      const LatLng(30.5208, 78.8471), // Rudraprayag
-      const LatLng(30.1467, 78.7889), // Pauri
-      const LatLng(30.3753, 78.4444), // Tehri
-      const LatLng(30.7291, 78.4359), // Uttarkashi
-      const LatLng(29.7381, 80.2182), // Pithoragarh
-      const LatLng(28.9800, 79.4500), // Rudrapur
-      const LatLng(29.8377, 79.7694), // Bageshwar
-      const LatLng(29.2104, 79.5126), // Haldwani
-      const LatLng(29.8543, 77.8880), // Roorkee
+      const LatLng(30.3165, 78.0322), const LatLng(29.9457, 78.1642),
+      const LatLng(29.3919, 79.4542), const LatLng(30.0869, 78.2676),
+      const LatLng(30.5208, 78.8471), const LatLng(29.8543, 77.8880),
     ];
 
-    Set<Marker> sensorMarkers = {};
-
     for (int i = 0; i < uttarakhandPoints.length; i++) {
-      // Simulating real-time data
-      double temp = 15 + random.nextDouble() * 15; // 15°C to 30°C
-      int humidity = 40 + random.nextInt(40); // 40% to 80%
-      double turbidity = random.nextDouble() * 5.0; // 0-5 NTU
-
-      sensorMarkers.add(
+      final node = SensorNode(
+        id: "UK-${100 + i}",
+        position: uttarakhandPoints[i],
+        temperature: 18.0 + random.nextDouble() * 10,
+        humidity: 50 + random.nextInt(30),
+        turbidity: random.nextDouble() * 3.0,
+      );
+      _activeSensors.add(node);
+      _markers.add(
         Marker(
-          markerId: MarkerId('sensor_$i'),
-          position: uttarakhandPoints[i],
+          markerId: MarkerId(node.id),
+          position: node.position,
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-          infoWindow: InfoWindow(
-            title: "Sensor Node UK-${100 + i}",
-            snippet: "Temp: ${temp.toStringAsFixed(1)}°C | Hum: $humidity% | Turb: ${turbidity.toStringAsFixed(2)} NTU",
-          ),
+          onTap: () => _handleMarkerTap(node),
         ),
       );
     }
-
-    setState(() {
-      _markers.addAll(sensorMarkers);
-    });
   }
 
-  void _onStateSelected(String? stateName) async {
-    if (stateName == null) return;
-    final coords = _indiaStates[stateName]!;
-    final GoogleMapController controller = await _controller.future;
+  void _handleMarkerTap(SensorNode node) {
+    setState(() {
+      _selectedState = "Uttarakhand";
+      _isPanelOpen = true;
+    });
+    _animateCamera(node.position, 12.0);
+  }
 
+  void _onStateSelected(String? stateName) {
+    if (stateName == null) return;
     setState(() {
       _selectedState = stateName;
-      // We keep the sensor markers and just move the camera
+      _isPanelOpen = true; // Fix #3: Ensure panel opens on state selection
     });
+    _animateCamera(_indiaStates[stateName]!, stateName == "Uttarakhand" ? 8.5 : 6.5);
+  }
 
-    controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: coords, zoom: stateName == "Uttarakhand" ? 8.5 : 6.5),
-      ),
-    );
+  Future<void> _animateCamera(LatLng position, double zoom) async {
+    final GoogleMapController controller = await _controller.future;
+    controller.animateCamera(CameraUpdate.newCameraPosition(
+      CameraPosition(target: position, zoom: zoom),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       body: Stack(
         children: [
+          // 1. Map
           GoogleMap(
-            initialCameraPosition: _initialIndia,
+            initialCameraPosition: const CameraPosition(target: LatLng(22.0, 78.0), zoom: 4.5),
             markers: _markers,
-            onMapCreated: (GoogleMapController controller) => _controller.complete(controller),
+            onMapCreated: (c) => _controller.complete(c),
             zoomControlsEnabled: false,
+            onTap: (_) => setState(() => _isPanelOpen = false),
           ),
+
+          // 2. Dropdown Header
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: _buildDropdown(),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                // Fix #1: Use finite width calculation instead of double.infinity
+                width: _isPanelOpen ? screenWidth - 380 : screenWidth - 32,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedState,
+                    hint: const Text("Select State"),
+                    isExpanded: true,
+                    items: _indiaStates.keys.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: _onStateSelected,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Side Panel
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            right: _isPanelOpen ? 0 : -350,
+            top: 0,
+            bottom: 0,
+            child: GestureDetector(
+              onTap: () {}, // This prevents taps from reaching the map
+              behavior: HitTestBehavior.opaque, // This ensures the entire area catches the tap
+              child: _buildSidePanel(),
             ),
           ),
         ],
@@ -157,28 +170,103 @@ class _MapConfigurationState extends State<MapConfiguration> with AutomaticKeepA
     );
   }
 
-  Widget _buildDropdown() {
+  Widget _buildSidePanel() {
     return Container(
-      decoration: BoxDecoration(
+      width: 350,
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), bottomLeft: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 15, spreadRadius: 5)],
       ),
+      child: Column(
+        children: [
+          const SizedBox(height: 60),
+          _buildPanelHeader(),
+          const Divider(height: 1),
+          Expanded(child: _buildSensorList()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanelHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          const CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.map, color: Colors.white)),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_selectedState ?? "Select State", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const Text("Regional Analytics", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => setState(() => _isPanelOpen = false),
+            icon: const Icon(Icons.close_fullscreen_rounded),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSensorList() {
+    bool hasSensors = _selectedState == "Uttarakhand";
+
+    if (!hasSensors) {
+      return const Center(child: Text("No data for this region", style: TextStyle(color: Colors.grey)));
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedState,
-          hint: const Text("Select India State", style: TextStyle(color: Colors.indigo)),
-          isExpanded: true,
-          items: _indiaStates.keys.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
-            );
-          }).toList(),
-          onChanged: _onStateSelected,
-        ),
-      ),
+      itemCount: _activeSensors.length,
+      itemBuilder: (context, index) {
+        final sensor = _activeSensors[index];
+        return GestureDetector(
+          onTap: (){},
+          child: Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: Colors.grey.shade200),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: ExpansionTile(
+              key: PageStorageKey(sensor.id),
+              shape: const Border(), // Removes default tile borders
+              leading: const Icon(Icons.sensors, color: Colors.orange),
+              title: Text("Node ${sensor.id}"),
+              subtitle: Text("Health: 100%", style: TextStyle(color: Colors.green.shade700, fontSize: 11)),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 15, left: 15, right: 15),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _tileStat("Temp", "${sensor.temperature.toStringAsFixed(1)}°C"),
+                      _tileStat("Hum", "${sensor.humidity}%"),
+                      _tileStat("Turb", "${sensor.turbidity.toStringAsFixed(2)}"),
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _tileStat(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
     );
   }
 }
